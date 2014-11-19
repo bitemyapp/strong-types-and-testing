@@ -143,6 +143,7 @@ instance FromJSON (EmailValidation EmailForm) where
                          v .: "name"
   parseJSON _          = mzero
 
+
 parseEmailJSON :: BL.ByteString -> EmailValidation EmailForm
 parseEmailJSON = either (V.Failure . return . BadJsonForEmail) id . eitherDecode
 
