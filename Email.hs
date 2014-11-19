@@ -125,10 +125,7 @@ getJSON e f v = case from of
   where from = fromJSON v
 
 instance FromJSON (EmailValidation ToAddress) where
-  parseJSON v = case address of
-    (Error _)   -> pure $ V.Failure [BadJsonToAddress]
-    (Success a) -> pure $ V.Success (ToAddress a)
-    where address = fromJSON v
+  parseJSON v = getJSON BadJsonFromAddress ToAddress v
 
 instance FromJSON (EmailValidation FromAddress) where
   parseJSON v = case address of
