@@ -1,0 +1,6 @@
+# Cabal temporary stuff
+dist/
+*.o
+*.hi
+.cabal-sandbox/
+cabal.sandbox.config
