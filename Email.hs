@@ -8,23 +8,24 @@ module Email
 
 import Control.Applicative
 import Control.Monad (join, mzero)
-import Data.Aeson (FromJSON, eitherDecode, Value(..), (.:), parseJSON)
+import Data.Aeson
 import Data.Bool (bool)
 import qualified Data.ByteString.Lazy as BL
 import Data.ByteString.Lazy.Char8 (pack)
 import Data.Either (either)
-import Data.Either.Validation
+import qualified Data.Either.Validation as V
 import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8)
 import Text.Email.Validate (isValid)
 
 
-newtype ToAddress     = ToAddress     T.Text deriving (Eq, Show)
-newtype FromAddress   = FromAddress   T.Text deriving (Eq, Show)
+newtype Email         = Email         T.Text deriving (Eq, Show)
+newtype ToAddress     = ToAddress     Email  deriving (Eq, Show)
+newtype FromAddress   = FromAddress   Email  deriving (Eq, Show)
 newtype EmailBody     = EmailBody     T.Text deriving (Eq, Show)
 newtype RecipientName = RecipientName T.Text deriving (Eq, Show)
 
-data Email = Email {
+data EmailForm = EmailForm {
     toAddress     :: ToAddress
   , fromAddress   :: FromAddress
   , emailBody     :: EmailBody
@@ -34,32 +35,40 @@ data Email = Email {
 validateEmail :: T.Text -> Bool
 validateEmail = isValid . encodeUtf8
 
-type EmailValidation a = Validation [EmailErrors] a
+validEmail :: T.Text -> Maybe Email
+validEmail v = if validateEmail v then
+                 Just (Email v)
+                 else
+                 Nothing
+
+type EmailValidation a = V.Validation [EmailErrors] a
 
 mkEmail :: ToAddress
         -> FromAddress
         -> EmailBody
         -> RecipientName
-        -> EmailValidation Email
-mkEmail to@(ToAddress toTxt) from@(FromAddress fromTxt)
-        body name = Email <$> toV <*> fromV <*> pure body <*> pure name
+        -> EmailValidation EmailForm
+mkEmail to@(ToAddress (Email toTxt)) from@(FromAddress (Email fromTxt))
+        body name = EmailForm <$> toV <*> fromV <*> pure body <*> pure name
   where toB   = validateEmail toTxt
         fromB = validateEmail fromTxt
-        toV   = bool (Failure [ToAddressDidntParse]) (Success to) toB
-        fromV = bool (Failure [FromAddressDidntParse]) (Success from) fromB
+        toV   = bool (V.Failure [ToAddressDidntParse]) (V.Success to) toB
+        fromV = bool (V.Failure [FromAddressDidntParse]) (V.Success from) fromB
 
 mkEmailV :: EmailValidation ToAddress
         -> EmailValidation FromAddress
         -> EmailValidation EmailBody
         -> EmailValidation RecipientName
-        -> EmailValidation Email
-mkEmailV to from body name = Email <$> to <*> from <*> body <*> name
+        -> EmailValidation EmailForm
+mkEmailV to from body name = EmailForm <$> to <*> from <*> body <*> name
 
 data EmailErrors = ToAddressDidntParse
                  | FromAddressDidntParse
                  | BadJsonForEmail String
                  | BadJsonToAddress
-                 | BadJsonFromAddress deriving (Eq, Show)
+                 | BadJsonFromAddress
+                 | BadJsonEmailBody
+                 | BadJsonRecipientName deriving (Eq, Show)
 
 goodJson :: BL.ByteString
 goodJson = pack $
@@ -81,14 +90,23 @@ jsonBadEmail = pack $
                    "\"body\": \"hello!\",",
                    "\"name\": \"Levi\"}"]
 
+instance FromJSON Email where
+  parseJSON (String v) = bool (fail "Email failed validation")
+                         (pure (Email v)) (validateEmail v)
+  parseJSON _ = mzero
+
 instance FromJSON ToAddress where
-  parseJSON (String v) = bool (fail "ToAddress failed validation")
-                         (pure (ToAddress v)) (validateEmail v)
+  parseJSON (String v) = case validEmail v of
+    (Just _) -> pure (ToAddress (Email v))
+    Nothing  -> fail "ToAddress email failed validation"
   parseJSON _ = mzero
 
 instance FromJSON FromAddress where
-  parseJSON (String v) = bool (fail "FromAddress failed validation")
-                         (pure (FromAddress v)) (validateEmail v)
+  parseJSON (String v) = case validEmail v of
+    (Just _) -> pure (FromAddress (Email v))
+    Nothing  -> fail "FromAddress email failed validation"
+    -- bool (fail "FromAddress failed validation")
+    -- (pure (FromAddress (Email v))) (validateEmail v)
   parseJSON _ = mzero
 
 instance FromJSON EmailBody where
@@ -99,26 +117,39 @@ instance FromJSON RecipientName where
   parseJSON (String v) = pure (RecipientName v)
   parseJSON _ = mzero
 
+getJSON :: (FromJSON a, Applicative f) =>
+           e -> (a -> b) -> Value -> f (V.Validation [e] b)
+getJSON e f v = case from of
+  (Error _) -> pure $ V.Failure [e]
+  (Success a) -> pure $ V.Success (f a)
+  where from = fromJSON v
+
 instance FromJSON (EmailValidation ToAddress) where
-  parseJSON (String v) = bool (pure . Failure $ [BadJsonToAddress])
-                         ((pure . pure) $ (ToAddress v)) (validateEmail v)
-  parseJSON _ = mzero
+  parseJSON v = case address of
+    (Error _)   -> pure $ V.Failure [BadJsonToAddress]
+    (Success a) -> pure $ V.Success (ToAddress a)
+    where address = fromJSON v
 
 instance FromJSON (EmailValidation FromAddress) where
-  parseJSON (String v) = bool (pure . Failure $ [BadJsonFromAddress])
-                         ((pure . pure) $ (FromAddress v)) (validateEmail v)
-  parseJSON _ = mzero
+  parseJSON v = case address of
+    (Error _)   -> pure $ V.Failure [BadJsonFromAddress]
+    (Success a) -> pure $ V.Success (FromAddress a)
+    where address = fromJSON v
 
 instance FromJSON (EmailValidation EmailBody) where
-  parseJSON (String v) = (pure . pure) $ (EmailBody v)
-  parseJSON _ = mzero
+  parseJSON v = case body of
+    (Error _)   -> pure $ V.Failure [BadJsonEmailBody]
+    (Success a) -> pure $ V.Success a
+    where body = fromJSON v
 
 instance FromJSON (EmailValidation RecipientName) where
-  parseJSON (String v) = (pure . pure) $ (RecipientName v)
-  parseJSON _ = mzero
+  parseJSON v = case name of
+    (Error _)   -> pure $ V.Failure [BadJsonRecipientName]
+    (Success a) -> pure $ V.Success a
+    where name = fromJSON v
 
 
-instance FromJSON (EmailValidation Email) where
+instance FromJSON (EmailValidation EmailForm) where
   parseJSON (Object v) =    mkEmailV  <$>
                          v .: "to"   <*>
                          v .: "from" <*>
@@ -126,8 +157,8 @@ instance FromJSON (EmailValidation Email) where
                          v .: "name"
   parseJSON _          = mzero
 
-parseEmailJSON :: BL.ByteString -> EmailValidation Email
-parseEmailJSON = either (Failure . return . BadJsonForEmail) id . eitherDecode
+parseEmailJSON :: BL.ByteString -> EmailValidation EmailForm
+parseEmailJSON = either (V.Failure . return . BadJsonForEmail) id . eitherDecode
 
 main :: IO ()
 main = do
