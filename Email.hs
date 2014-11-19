@@ -105,8 +105,6 @@ instance FromJSON FromAddress where
   parseJSON (String v) = case validEmail v of
     (Just _) -> pure (FromAddress (Email v))
     Nothing  -> fail "FromAddress email failed validation"
-    -- bool (fail "FromAddress failed validation")
-    -- (pure (FromAddress (Email v))) (validateEmail v)
   parseJSON _ = mzero
 
 instance FromJSON EmailBody where
@@ -125,25 +123,16 @@ getJSON e f v = case from of
   where from = fromJSON v
 
 instance FromJSON (EmailValidation ToAddress) where
-  parseJSON v = getJSON BadJsonFromAddress ToAddress v
+  parseJSON = getJSON BadJsonToAddress ToAddress
 
 instance FromJSON (EmailValidation FromAddress) where
-  parseJSON v = case address of
-    (Error _)   -> pure $ V.Failure [BadJsonFromAddress]
-    (Success a) -> pure $ V.Success (FromAddress a)
-    where address = fromJSON v
+  parseJSON = getJSON BadJsonFromAddress FromAddress
 
 instance FromJSON (EmailValidation EmailBody) where
-  parseJSON v = case body of
-    (Error _)   -> pure $ V.Failure [BadJsonEmailBody]
-    (Success a) -> pure $ V.Success a
-    where body = fromJSON v
+  parseJSON = getJSON BadJsonEmailBody id
 
 instance FromJSON (EmailValidation RecipientName) where
-  parseJSON v = case name of
-    (Error _)   -> pure $ V.Failure [BadJsonRecipientName]
-    (Success a) -> pure $ V.Success a
-    where name = fromJSON v
+  parseJSON = getJSON BadJsonRecipientName id
 
 
 instance FromJSON (EmailValidation EmailForm) where
