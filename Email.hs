@@ -65,10 +65,10 @@ mkEmailV to from body name = EmailForm <$> to <*> from <*> body <*> name
 data EmailErrors = ToAddressDidntParse
                  | FromAddressDidntParse
                  | BadJsonForEmail String
-                 | BadJsonToAddress
-                 | BadJsonFromAddress
-                 | BadJsonEmailBody
-                 | BadJsonRecipientName deriving (Eq, Show)
+                 | BadJsonToAddress String
+                 | BadJsonFromAddress String 
+                 | BadJsonEmailBody String
+                 | BadJsonRecipientName String deriving (Eq, Show)
 
 goodJson :: BL.ByteString
 goodJson = pack $
@@ -116,10 +116,10 @@ instance FromJSON RecipientName where
   parseJSON _ = mzero
 
 getJSON :: (FromJSON a, Applicative f) =>
-           e -> (a -> b) -> Value -> f (V.Validation [e] b)
+           (String -> e) -> (a -> b) -> Value -> f (V.Validation [e] b)
 getJSON e f v = case from of
-  (Error _) -> pure $ V.Failure [e]
-  (Success a) -> pure $ V.Success (f a)
+  (Error str)   -> pure $ V.Failure [e str]
+  (Success a)   -> pure $ V.Success (f a)
   where from = fromJSON v
 
 instance FromJSON (EmailValidation ToAddress) where
