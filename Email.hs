@@ -36,17 +36,17 @@ validateEmail = isValid . encodeUtf8
 
 type EmailValidation a = Validation [EmailErrors] a
 
-mkEmail :: ToAddress
-        -> FromAddress
-        -> EmailBody
-        -> RecipientName
-        -> EmailValidation Email
-mkEmail to@(ToAddress toTxt) from@(FromAddress fromTxt)
-        body name = Email <$> toV <*> fromV <*> pure body <*> pure name
-  where toB   = validateEmail toTxt
-        fromB = validateEmail fromTxt
-        toV   = bool (Failure [ToAddressDidntParse]) (Success to) toB
-        fromV = bool (Failure [FromAddressDidntParse]) (Success from) fromB
+-- mkEmail :: ToAddress
+--         -> FromAddress
+--         -> EmailBody
+--         -> RecipientName
+--         -> EmailValidation Email
+-- mkEmail to@(ToAddress toTxt) from@(FromAddress fromTxt)
+--         body name = Email <$> toV <*> fromV <*> pure body <*> pure name
+--   where toB   = validateEmail toTxt
+--         fromB = validateEmail fromTxt
+--         toV   = bool (Failure [ToAddressDidntParse]) (Success to) toB
+--         fromV = bool (Failure [FromAddressDidntParse]) (Success from) fromB
 
 mkEmailV :: EmailValidation ToAddress
         -> EmailValidation FromAddress
@@ -124,20 +124,14 @@ instance FromJSON (EmailValidation Email) where
                          v .: "from" <*>
                          v .: "body" <*>
                          v .: "name"
-    -- to   <- v .: "to"   :: EmailValidation ToAddress
-    -- from <- v .: "from" :: EmailValidation FromAddress
-    -- body <- v .: "body" :: EmailValidation EmailBody
-    -- name <- v .: "name" :: EmailValidation RecipientName
-    -- return $ mkEmail to from body name
-    -- mkEmail <$> to <*> from <*> body <*> name
   parseJSON _          = mzero
 
 parseEmailJSON :: BL.ByteString -> EmailValidation Email
 parseEmailJSON = either (Failure . return . BadJsonForEmail) id . eitherDecode
 
--- main :: IO ()
--- main = do
---   let printJSON = print . parseEmailJSON
---   printJSON goodJson
---   printJSON jsonMissingKey
---   printJSON jsonBadEmail
+main :: IO ()
+main = do
+  let printJSON = print . parseEmailJSON
+  printJSON goodJson
+  printJSON jsonMissingKey
+  printJSON jsonBadEmail
