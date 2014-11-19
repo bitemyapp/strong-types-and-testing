@@ -95,16 +95,16 @@ instance FromJSON Email where
                          (pure (Email v)) (validateEmail v)
   parseJSON _ = mzero
 
+maybeEmail eStr f v = maybe (fail eStr) (const (pure (f v))) (validEmail v)
+
 instance FromJSON ToAddress where
-  parseJSON (String v) = case validEmail v of
-    (Just _) -> pure (ToAddress (Email v))
-    Nothing  -> fail "ToAddress email failed validation"
+  parseJSON (String v) = maybeEmail "ToAddress email failed validation"
+                         (ToAddress . Email) v
   parseJSON _ = mzero
 
 instance FromJSON FromAddress where
-  parseJSON (String v) = case validEmail v of
-    (Just _) -> pure (FromAddress (Email v))
-    Nothing  -> fail "FromAddress email failed validation"
+  parseJSON (String v) = maybeEmail "FromAddress email failed validation"
+                         (FromAddress . Email) v
   parseJSON _ = mzero
 
 instance FromJSON EmailBody where
